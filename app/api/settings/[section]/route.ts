@@ -36,6 +36,7 @@ import {
 	clampChatLevel,
 	clampModelsLevels,
 	effectiveSettings,
+	ensureNineRouterCatalog,
 	promptOverrides,
 	readSettingsRecord,
 	validateChatSettings,
@@ -67,6 +68,9 @@ export async function PUT(request: Request, ctx: { params: Promise<{ section: st
 
 	// Section-specific cross-validation (against the catalog / the prompt
 	// store) — the parsers only see shapes.
+	// Dynamic-catalog gate (9Router): a slot can only name a model the
+	// in-memory catalog holds, so warm it before the gate runs.
+	if (section === "chat" || section === "models") await ensureNineRouterCatalog();
 	if (section === "chat") {
 		const verdict = validateChatSettings(parsed.settings as ChatSettings);
 		if (!verdict.ok) {

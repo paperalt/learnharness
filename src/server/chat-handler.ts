@@ -41,7 +41,7 @@ import { persistTurn, triggerExtraction } from "./turn-service.ts";
 import { hasProbeDone, danglingQuestionOf } from "../core/native-messages.ts";
 import { composeInstructions } from "../agent/teacher-agent.ts";
 import { ensureCompacted, kickCompaction, effectiveThresholdTokens } from "./compaction.ts";
-import { catalogContextLimits } from "./model-catalog.ts";
+import { catalogContextLimits, ensureNineRouterCatalog } from "./model-catalog.ts";
 import { emit } from "../core/events.ts";
 import { settledTurnResponse } from "./turn-runs.ts";
 import { asAgentMessages } from "../core/native-messages.ts";
@@ -134,7 +134,9 @@ function resolveEngine(role: ModelRole): PiEngine | undefined {
 	return spec ? piEngineForSpec(spec) : undefined;
 }
 
-setJobRespawn((jobId) => void jobRunner.runJob(jobId));
+setJobRespawn((jobId) => {
+	void ensureNineRouterCatalog().then(() => jobRunner.runJob(jobId));
+});
 
 /** The route-facing entry: parse {chatId, input} and run one turn. */
 export async function handleChatRequest(
@@ -206,6 +208,14 @@ export async function handleChatInput(
 		console.info(`[chat ${chatId}] turn refused — ${JSON.stringify(envelope)}`);
 		return Response.json(envelope, { status: 503 });
 	}
+
+	// THE DYNAMIC-CATALOG GATE (9Router, spec 2026-10-24): a pinned 9Router
+	// model exists in the in-memory catalog only after a refresh, and a cold
+	// piEngineForSpec would throw mid-request. Placement mirrors the two
+	// gates above — BEFORE the compaction gate, beginTurn, and the
+	// write-ahead persist, so a dead router produces no liveness or durable
+	// effects. Warm catalogs return immediately (stale-while-revalidate).
+	await ensureNineRouterCatalog();
 
 	// THE COMPACTION GATE (owner round 14, 2026-10-05 — the structural
 	// ruling: NOTHING model-facing for this chat interleaves with a

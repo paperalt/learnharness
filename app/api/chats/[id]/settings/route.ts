@@ -1,6 +1,7 @@
 import {
 	clampChatLevel,
 	effectiveSettings,
+	ensureNineRouterCatalog,
 	getChat,
 	parseSettingsBody,
 	stores,
@@ -32,6 +33,9 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 	const parsed = parseSettingsBody(body);
 	if (!parsed.ok) return Response.json({ error: parsed.error }, { status: 400 });
 
+	// Dynamic-catalog gate (9Router): same warm-up as the settings PUT —
+	// an unavailable router must not turn a valid write into a 400.
+	await ensureNineRouterCatalog();
 	const verdict = validateChatSettings(parsed.settings);
 	if (!verdict.ok) {
 		return Response.json({ error: verdict.error, supported: verdict.supported }, { status: 400 });

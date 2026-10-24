@@ -13,7 +13,7 @@
  * healthy. The dock's chips + graph refetch track progress live through
  * /api/graph/status, as with session runs.
  */
-import { extraction, NotesImportError } from "@/src/server";
+import { extraction, ensureNineRouterCatalog, NotesImportError } from "@/src/server";
 import {
 	ModelsNotConfiguredError,
 	PROVIDER_KEY_MISSING_CODE,
@@ -46,6 +46,10 @@ export async function POST(request: Request) {
 	if (files.length === 0) {
 		return Response.json({ results: [] as ImportResult[], error: "no files" }, { status: 400 });
 	}
+
+	// Dynamic-catalog gate (9Router): role engines resolve synchronously
+	// inside the pipeline — warm the dynamic catalog before the pool runs.
+	await ensureNineRouterCatalog();
 
 	const results: ImportResult[] = [];
 	const queue = files.map((file, requestIndex) => ({ file, requestIndex }));
