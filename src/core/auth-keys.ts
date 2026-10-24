@@ -122,14 +122,39 @@ export const AUTH_PROVIDER_KEYS: readonly AuthProviderInfo[] = [
 	{ id: "zai-coding-cn", envVar: "ZAI_CODING_CN_API_KEY", label: "Z.AI Coding CN" },
 ] as const;
 
-/** Every distinct env var a model-provider key rides in (the write side's
- *  writability check — see isProviderEnvVar below; also drives which
- *  PRESENT provider vars surface as status rows). */
+/** Every distinct env var a MODEL-PROVIDER key rides in — pi-ai builtins
+ *  only. Kept for src/server/keys.ts until Task 4 moves that consumer to
+ *  PROVIDER_ENV_VARS; NOT the writability check anymore (isProviderEnvVar
+ *  below reads the combined set). */
 export const AUTH_PROVIDER_ENV_VARS: ReadonlySet<string> = new Set(AUTH_PROVIDER_KEYS.map((p) => p.envVar));
 
-/** Is this env-var name the key of SOME pi-ai model provider? */
+/**
+ * APP-OWNED PROVIDERS (9Router integration, 2026-10-25): providers this
+ * app runs that pi-ai has no builtin entry for. Kept SEPARATE from
+ * AUTH_PROVIDER_KEYS so that table stays exactly pi-ai's table — the
+ * no-drift test above pins it. Same shape, so every consumer treats a
+ * custom row like a builtin one.
+ */
+export const CUSTOM_PROVIDER_KEYS: readonly AuthProviderInfo[] = [
+	{ id: "9router", envVar: "NINEROUTER_API_KEY", label: "9Router" },
+];
+
+/** Every provider this app can key and run: pi-ai builtins + app-owned.
+ *  The UI's provider dropdown, the catalog's federation set, and every
+ *  server-side key gate read THIS table. */
+export const PROVIDER_KEYS: readonly AuthProviderInfo[] = [
+	...AUTH_PROVIDER_KEYS,
+	...CUSTOM_PROVIDER_KEYS,
+];
+
+/** Every distinct env var a provider key rides in, builtin or app-owned
+ *  (the write side's writability check — see isProviderEnvVar below; also
+ *  drives which PRESENT provider vars surface as status rows). */
+export const PROVIDER_ENV_VARS: ReadonlySet<string> = new Set(PROVIDER_KEYS.map((p) => p.envVar));
+
+/** Is this env-var name the key of SOME model provider (builtin or app-owned)? */
 export function isProviderEnvVar(envVar: string): boolean {
-	return AUTH_PROVIDER_ENV_VARS.has(envVar);
+	return PROVIDER_ENV_VARS.has(envVar);
 }
 
 /** Shape-check result: ok, or a 400-ready message naming the expectation. */

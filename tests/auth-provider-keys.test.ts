@@ -20,7 +20,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { AUTH_PROVIDER_KEYS, isProviderEnvVar } from "../src/core/auth-keys.ts";
+import { AUTH_PROVIDER_KEYS, CUSTOM_PROVIDER_KEYS, PROVIDER_KEYS, isProviderEnvVar } from "../src/core/auth-keys.ts";
 import { builtinProviders } from "../node_modules/@earendil-works/pi-ai/dist/providers/all.js";
 import { findEnvKeys } from "../node_modules/@earendil-works/pi-ai/dist/env-api-keys.js";
 
@@ -88,5 +88,30 @@ describe("AUTH_PROVIDER_KEYS — the no-drift pin against pi-ai", () => {
 		for (const p of AUTH_PROVIDER_KEYS) assert.ok(isProviderEnvVar(p.envVar), `${p.envVar} is a provider var`);
 		assert.ok(!isProviderEnvVar("OPENROUTER_API_KEYS"), "typo'd name is not one");
 		assert.ok(!isProviderEnvVar("DEEPGRAM_API_KEY"), "curated ≠ provider — separate surfaces");
+	});
+});
+
+describe("CUSTOM_PROVIDER_KEYS — app-owned providers beside the builtin pin", () => {
+	it("the 9Router row is in PROVIDER_KEYS; the builtin table stays separate", () => {
+		assert.deepEqual(
+			CUSTOM_PROVIDER_KEYS.find((p) => p.id === "9router"),
+			{ id: "9router", envVar: "NINEROUTER_API_KEY", label: "9Router" },
+		);
+		assert.ok(PROVIDER_KEYS.some((p) => p.id === "9router"), "custom rows reach the combined table");
+		assert.equal(
+			PROVIDER_KEYS.length,
+			AUTH_PROVIDER_KEYS.length + CUSTOM_PROVIDER_KEYS.length,
+			"combined = builtins + custom, no dedupe games",
+		);
+		// The exact-equality pin above still reads AUTH_PROVIDER_KEYS alone —
+		// a pi-ai upgrade must fail there, not be masked by the custom row.
+		assert.ok(!AUTH_PROVIDER_KEYS.some((p) => p.id === "9router"), "custom row never leaks into the pin");
+	});
+
+	it("isProviderEnvVar covers builtin AND custom provider vars", () => {
+		for (const p of PROVIDER_KEYS) assert.ok(isProviderEnvVar(p.envVar), `${p.envVar} is a provider var`);
+		assert.ok(isProviderEnvVar("NINEROUTER_API_KEY"));
+		assert.ok(!isProviderEnvVar("NINEROUTER_API_KEYS"), "typo'd name is not one");
+		assert.ok(!isProviderEnvVar("DEEPGRAM_API_KEY"), "curated tool keys stay outside the provider set");
 	});
 });
