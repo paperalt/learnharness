@@ -269,6 +269,20 @@ describe("classifyKeys — the Keys section's two-group projection", () => {
 		const out = classifyKeys([], undefined);
 		assert.deepEqual(out.addable, []);
 	});
+
+	it("the custom 9Router provider rides the same classification as builtins", () => {
+		const nine: ProviderKeyInfo[] = [
+			...providers,
+			{ id: "9router", envVar: "NINEROUTER_API_KEY", label: "9Router" },
+		];
+		const absent = classifyKeys([], nine);
+		assert.equal(absent.providerRows.length, 0, "nothing synthesized for an absent key");
+		assert.ok(absent.addable.some((p) => p.id === "9router"), "offered by the Add dropdown");
+
+		const stored = classifyKeys([synth("NINEROUTER_API_KEY", true)], nine);
+		assert.equal(stored.providerRows[0]?.id, "NINEROUTER_API_KEY");
+		assert.ok(!stored.addable.some((p) => p.id === "9router"), "keyed rows leave the dropdown");
+	});
 });
 
 describe("keyStatusLine — the minimal at-a-glance state", () => {

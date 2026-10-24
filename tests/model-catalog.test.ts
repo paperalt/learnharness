@@ -104,6 +104,13 @@ describe("the model catalog projection", () => {
 		}
 	});
 
+	it("catalogProviders lists the custom 9Router row through PROVIDER_KEYS", () => {
+		const row = catalogProviders().find((p) => p.id === "9router");
+		assert.ok(row, "custom provider reaches the providers surface");
+		assert.equal(row.envVar, "NINEROUTER_API_KEY");
+		assert.equal(typeof row.keyPresent, "boolean");
+	});
+
 	it("defaults: the strong slot verbatim; null when unset (BYOK, per-session models 2026-09-28)", () => {
 		assert.equal(catalogDefaultsFor(null), null);
 		const strong = { provider: "openrouter", id: "z-ai/glm-5.3-flash", thinkingLevel: "low" as const };

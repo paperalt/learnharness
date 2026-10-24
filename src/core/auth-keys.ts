@@ -122,12 +122,6 @@ export const AUTH_PROVIDER_KEYS: readonly AuthProviderInfo[] = [
 	{ id: "zai-coding-cn", envVar: "ZAI_CODING_CN_API_KEY", label: "Z.AI Coding CN" },
 ] as const;
 
-/** Every distinct env var a MODEL-PROVIDER key rides in — pi-ai builtins
- *  only. Kept for src/server/keys.ts until Task 4 moves that consumer to
- *  PROVIDER_ENV_VARS; NOT the writability check anymore (isProviderEnvVar
- *  below reads the combined set). */
-export const AUTH_PROVIDER_ENV_VARS: ReadonlySet<string> = new Set(AUTH_PROVIDER_KEYS.map((p) => p.envVar));
-
 /**
  * APP-OWNED PROVIDERS (9Router integration, 2026-10-25): providers this
  * app runs that pi-ai has no builtin entry for. Kept SEPARATE from

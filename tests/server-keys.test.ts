@@ -30,6 +30,7 @@ for (const varName of [
 	"GOOGLE_CSE_ID",
 	"OPENAI_API_KEY",
 	"FUTURE_PLANS_TOKEN",
+	"NINEROUTER_API_KEY",
 ]) {
 	delete process.env[varName];
 }
@@ -51,10 +52,11 @@ fs.writeFileSync(
 process.env.OPENROUTER_API_KEY = "sk-or-v1-envvalue99";
 
 // Import AFTER env setup — module init runs the boot fill-gap + snapshot.
-const { deleteKey, initAuthEnv, keyStatuses, keyValue, resolveKeyStatuses, saveKey, isWritableAuthKey } = await import(
+const { deleteKey, initAuthEnv, keyStatuses, keyValue, providerKeyList, providerKeyPresent, resolveKeyStatuses, saveKey, isWritableAuthKey } = await import(
 	"../src/server/keys.ts"
 );
 const { authStore } = await import("../src/store/auth.ts");
+const { providerKeyMissing } = await import("../src/core/settings.ts");
 
 const ENV_OWNED = "sk-or-v1-envvalue99";
 
@@ -205,5 +207,32 @@ describe("resolveKeyStatuses (pure projection)", () => {
 		assert.ok(row, "the curated id is always in the projection");
 		assert.equal(row.source, "env");
 		assert.ok(!row.shadowedByEnv, "same value both places: redundant, not shadowed");
+	});
+});
+
+describe("custom providers (9Router, spec 2026-10-24)", () => {
+	it("providerKeyList exposes the app-owned 9Router row for the dropdown", () => {
+		assert.deepEqual(providerKeyList().find((p) => p.id === "9router"), {
+			id: "9router",
+			envVar: "NINEROUTER_API_KEY",
+			label: "9Router",
+		});
+	});
+
+	it("isWritableAuthKey accepts the provider's env var", () => {
+		assert.ok(isWritableAuthKey("NINEROUTER_API_KEY"));
+	});
+
+	it("providerKeyPresent follows env/file truth for the custom provider", () => {
+		assert.equal(providerKeyPresent("9router"), false, "no key anywhere");
+		const saved = saveKey("NINEROUTER_API_KEY", "test-9router-key-000000");
+		assert.ok(saved.ok, saved.ok ? "" : saved.error);
+		assert.equal(providerKeyPresent("9router"), true, "file key + fill-gap reflection");
+		deleteKey("NINEROUTER_API_KEY");
+		assert.equal(providerKeyPresent("9router"), false, "gone from file and env");
+	});
+
+	it("the key-missing refusal labels it 9Router from the combined table", () => {
+		assert.match(providerKeyMissing("9router", ["strong"]).error, /^No 9Router key is set/);
 	});
 });
