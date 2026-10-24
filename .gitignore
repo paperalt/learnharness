@@ -16,3 +16,7 @@ auth.json
 
 # dev-fresh launcher scratch (fresh-user sim): disposable per launch
 .fresh-data/
+
+# SDD workspace (superpowers subagent-driven-development): ledger, briefs,
+# reports and review packages are per-plan scratch, never staged
+.superpowers/
