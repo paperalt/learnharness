@@ -16,6 +16,8 @@ import {
 	NINE_ROUTER_DISPLAY_NAME,
 	NINE_ROUTER_PROVIDER_ID,
 } from "../src/agent/nine-router.ts";
+import { piModels } from "../src/agent/models.ts";
+import { CUSTOM_PROVIDER_KEYS } from "../src/core/auth-keys.ts";
 
 // Throwaway value — env resolution is part of what's under test.
 const TEST_KEY = "test-key-9router-000";
@@ -134,5 +136,26 @@ describe("createNineRouterProvider — discovery over /v1/models", () => {
 		const failed = await models.refresh({ providers: [NINE_ROUTER_PROVIDER_ID], force: true });
 		assert.ok(failed.errors.size >= 1, "the failure is reported, not thrown");
 		assert.equal(provider.getModels().length, 1, "previous list retained (spec failure table)");
+	});
+});
+
+describe("registration", () => {
+	it("piModels() serves the 9Router provider beside the builtins", () => {
+		const provider = piModels().getProvider(NINE_ROUTER_PROVIDER_ID);
+		assert.ok(provider, "registered in the process-wide collection");
+		assert.equal(provider.name, NINE_ROUTER_DISPLAY_NAME);
+		assert.equal(provider.baseUrl, NINE_ROUTER_BASE_URL);
+		assert.ok(piModels().getProviders().length > 30, "builtins registered too");
+		// Empty before the first refresh — a dynamic provider's contract.
+		assert.deepEqual(piModels().getModels(NINE_ROUTER_PROVIDER_ID), []);
+	});
+
+	it("core's CUSTOM_PROVIDER_KEYS row matches the agent constants (cross-layer pin)", () => {
+		const row = CUSTOM_PROVIDER_KEYS.find((p) => p.id === NINE_ROUTER_PROVIDER_ID);
+		assert.deepEqual(row, {
+			id: NINE_ROUTER_PROVIDER_ID,
+			envVar: NINE_ROUTER_API_KEY_ENV,
+			label: NINE_ROUTER_DISPLAY_NAME,
+		});
 	});
 });

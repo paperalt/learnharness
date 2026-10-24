@@ -8,6 +8,7 @@ import {
 	type StreamFunction,
 } from "@earendil-works/pi-ai";
 import { builtinProviders } from "@earendil-works/pi-ai/providers/all";
+import { createNineRouterProvider } from "./nine-router.ts";
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import { type ModelRole } from "../../config.ts";
 import { DEFAULT_THINKING_ORDER } from "../core/settings.ts";
@@ -57,6 +58,8 @@ export function piModels() {
 	if (!collection) {
 		collection = createModels({ identity: APP_IDENTITY });
 		for (const provider of builtinProviders()) collection.setProvider(provider);
+		// App-owned providers beside pi's builtins (9Router, spec 2026-10-24).
+		collection.setProvider(createNineRouterProvider());
 	}
 	return collection;
 }
