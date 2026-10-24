@@ -18,6 +18,7 @@ import {
 } from "../src/agent/nine-router.ts";
 import { piModels } from "../src/agent/models.ts";
 import { CUSTOM_PROVIDER_KEYS } from "../src/core/auth-keys.ts";
+import { ensureNineRouterCatalog, modelCatalog } from "../src/server/model-catalog.ts";
 
 // Throwaway value — env resolution is part of what's under test.
 const TEST_KEY = "test-key-9router-000";
@@ -157,5 +158,70 @@ describe("registration", () => {
 			envVar: NINE_ROUTER_API_KEY_ENV,
 			label: NINE_ROUTER_DISPLAY_NAME,
 		});
+	});
+});
+
+describe("ensureNineRouterCatalog — the refresh scheduler (spec §Refresh lifecycle)", () => {
+	const originalFetch = globalThis.fetch;
+	const originalKey = process.env[NINE_ROUTER_API_KEY_ENV];
+	let fetches = 0;
+	const workingFetch = async () => {
+		fetches++;
+		return new Response(JSON.stringify({ object: "list", data: [CAPABLE_ROW] }), { status: 200 });
+	};
+	const downFetch = async () => {
+		fetches++;
+		throw new Error("ECONNREFUSED — 9router is not running");
+	};
+	after(() => {
+		globalThis.fetch = originalFetch;
+		if (originalKey === undefined) delete process.env[NINE_ROUTER_API_KEY_ENV];
+		else process.env[NINE_ROUTER_API_KEY_ENV] = originalKey;
+	});
+
+	// ORDER MATTERS: node:test runs these in declaration order against ONE
+	// module-local scheduler and ONE process-wide catalog, so each case
+	// states what it relies on. Failure runs FIRST, while the catalog is
+	// still empty — an empty catalog AWAITS its refresh, which is what makes
+	// every assertion below synchronous and race-free.
+	it("dead router → the call resolves, nothing federates, no throw", async () => {
+		process.env[NINE_ROUTER_API_KEY_ENV] = TEST_KEY;
+		globalThis.fetch = downFetch as unknown as typeof fetch;
+		await assert.doesNotReject(() => ensureNineRouterCatalog(), "swallowed, never thrown (spec failure table)");
+		assert.equal(fetches, 1, "cold catalog → the refresh was attempted and awaited");
+		assert.equal(
+			modelCatalog().models.some((m) => m.provider === "9router"),
+			false,
+			"no models survive a cold failure — the picker's absence is the honest signal",
+		);
+	});
+
+	it("reachable router → one awaited fetch federates the mapped models", async () => {
+		process.env[NINE_ROUTER_API_KEY_ENV] = TEST_KEY;
+		globalThis.fetch = workingFetch as unknown as typeof fetch;
+		// Still cold (the failure above left nothing), so `await run` applies;
+		// ttlMs: 0 is the seam that forces a re-attempt past the failed attempt's TTL.
+		await ensureNineRouterCatalog({ ttlMs: 0 });
+		assert.equal(fetches, 2, "attempted again, awaited");
+		const found = modelCatalog().models.find((m) => m.provider === "9router" && m.id === "cc/claude-opus-4-6");
+		assert.ok(found, "mapped model reaches the picker projection");
+		assert.equal(found.contextWindow, 1_000_000);
+		assert.deepEqual(found.supportedLevels, ["off", "low", "medium", "high"]);
+	});
+
+	it("inside the 30 s TTL → no refetch", async () => {
+		await ensureNineRouterCatalog();
+		assert.equal(fetches, 2, "warm catalog inside the TTL returns without touching the network");
+	});
+
+	it("keyless → returns before any request", async () => {
+		delete process.env[NINE_ROUTER_API_KEY_ENV];
+		await ensureNineRouterCatalog({ ttlMs: 0 });
+		assert.equal(fetches, 2, "no key → the scheduler never fetches");
+		assert.equal(
+			modelCatalog().models.some((m) => m.provider === "9router"),
+			false,
+			"keyless providers never federate into the picker",
+		);
 	});
 });

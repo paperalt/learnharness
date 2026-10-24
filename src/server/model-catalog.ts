@@ -22,7 +22,8 @@ import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import { piModels } from "../agent/models.ts";
 import { settingsStore } from "../store/settings.ts";
 import { effectiveSettings } from "./stores.ts";
-import { keyValue } from "./keys.ts";
+import { keyValue, providerKeyPresent } from "./keys.ts";
+import { NINE_ROUTER_PROVIDER_ID } from "../agent/nine-router.ts";
 import type { ChatSettings } from "../core/contracts/chat.ts";
 import type {
 	CatalogDefaults,
@@ -194,6 +195,45 @@ export function modelCatalog(): ModelCatalogResponse {
 		slots: catalogSlots(),
 		providers: catalogProviders(),
 	};
+}
+
+/** The dynamic 9Router catalog's refresh scheduler (spec §Refresh
+ *  lifecycle). STATE IS MODULE-LOCAL on purpose: `piModels()`'s collection
+ *  is module-local too (separate route bundles / a dev HMR reload each get
+ *  their own), and a globalThis anchor would let one bundle's success
+ *  suppress another bundle's first fetch, leaving that bundle empty.
+ *
+ *  TTL 30 s counts a FAILED attempt too — a dead 9Router must not delay
+ *  every picker open. An empty catalog awaits the refresh (a first view
+ *  shows the real list); a warm one returns immediately
+ *  (stale-while-revalidate). */
+const NINE_ROUTER_CATALOG_TTL_MS = 30_000;
+const NINE_ROUTER_REFRESH_TIMEOUT_MS = 5_000;
+const nineRouterRefresh: { lastAttempt: number; inflight?: Promise<void> } = { lastAttempt: 0 };
+
+export async function ensureNineRouterCatalog(options?: { ttlMs?: number }): Promise<void> {
+	if (!providerKeyPresent(NINE_ROUTER_PROVIDER_ID)) return;
+	const ttl = options?.ttlMs ?? NINE_ROUTER_CATALOG_TTL_MS;
+	const empty = piModels().getModels(NINE_ROUTER_PROVIDER_ID).length === 0;
+	if (nineRouterRefresh.inflight) {
+		// One discovery at a time: cold callers wait for it, warm ones proceed.
+		if (empty) await nineRouterRefresh.inflight;
+		return;
+	}
+	if (Date.now() - nineRouterRefresh.lastAttempt < ttl) return;
+	const run = piModels()
+		.refresh({
+			providers: [NINE_ROUTER_PROVIDER_ID],
+			signal: AbortSignal.timeout(NINE_ROUTER_REFRESH_TIMEOUT_MS),
+		})
+		.then(() => undefined)
+		.catch(() => undefined) // spec: refresh errors are swallowed; the previous list stays
+		.finally(() => {
+			nineRouterRefresh.lastAttempt = Date.now();
+			nineRouterRefresh.inflight = undefined;
+		});
+	nineRouterRefresh.inflight = run;
+	if (empty) await run;
 }
 
 /** One validated outcome for a settings write. */
