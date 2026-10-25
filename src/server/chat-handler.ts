@@ -135,7 +135,9 @@ function resolveEngine(role: ModelRole): PiEngine | undefined {
 }
 
 setJobRespawn((jobId) => {
-	void ensureNineRouterCatalog().then(() => jobRunner.runJob(jobId));
+	void ensureNineRouterCatalog()
+		.catch(() => undefined)
+		.then(() => jobRunner.runJob(jobId));
 });
 
 /** The route-facing entry: parse {chatId, input} and run one turn. */

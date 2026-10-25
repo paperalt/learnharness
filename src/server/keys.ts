@@ -77,10 +77,11 @@ export function isWritableAuthKey(id: string): boolean {
 	return isKnownAuthKey(id) || isProviderEnvVar(id);
 }
 
-/** The settings page's provider dropdown: every pi-ai provider that takes
- *  a plain key ({id, envVar, label} — no-drift-pinned, see the table's doc
- *  in core/auth-keys.ts and tests/auth-provider-keys.test.ts). Sorted by
- *  id for a stable payload. */
+/** The settings page's provider dropdown: the COMBINED PROVIDER_KEYS table
+ *  — every pi-ai builtin that takes a plain key (AUTH_PROVIDER_KEYS, still
+ *  no-drift-pinned: core/auth-keys.ts, tests/auth-provider-keys.test.ts)
+ *  plus the app-owned 9Router row (9Router integration, 2026-10-25).
+ *  {id, envVar, label} throughout; sorted by id for a stable payload. */
 export function providerKeyList() {
 	return [...PROVIDER_KEYS].sort((a, b) => a.id.localeCompare(b.id));
 }

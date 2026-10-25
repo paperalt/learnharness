@@ -119,8 +119,10 @@ export function createNineRouterProvider(
 				signal: AbortSignal.any([context.signal, AbortSignal.timeout(FETCH_TIMEOUT_MS)]),
 			});
 			if (!response.ok) throw new Error(`9Router model list failed: ${response.status}`);
-			const body = (await response.json()) as { data?: unknown } | unknown[];
-			const rows = Array.isArray(body) ? body : (body.data ?? []);
+			// `null` is valid JSON: a null/non-object body (or a missing/non-array
+			// `data`) yields an empty list — the property read must never throw.
+			const body: unknown = await response.json();
+			const rows = Array.isArray(body) ? body : ((body as { data?: unknown } | null)?.data ?? []);
 			if (!Array.isArray(rows)) return [];
 			return rows
 				.map(mapNineRouterModel)

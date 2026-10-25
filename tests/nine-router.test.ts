@@ -138,6 +138,98 @@ describe("createNineRouterProvider — discovery over /v1/models", () => {
 		assert.ok(failed.errors.size >= 1, "the failure is reported, not thrown");
 		assert.equal(provider.getModels().length, 1, "previous list retained (spec failure table)");
 	});
+
+	it("a non-2xx reply is reported as a 9router error and publishes nothing", async () => {
+		const provider = createNineRouterProvider(async () => Response.json({}, { status: 401 }));
+		const models = createModels();
+		models.setProvider(provider);
+
+		// pi-ai reports provider failures in the result, never throws
+		// (models.d.ts: "Provider errors ... are returned without rejecting").
+		const result = await models.refresh({ providers: [NINE_ROUTER_PROVIDER_ID], force: true });
+		assert.equal(result.errors.size, 1, JSON.stringify([...result.errors]));
+		const error = result.errors.get(NINE_ROUTER_PROVIDER_ID);
+		assert.ok(error?.message.includes("401"), `unexpected error: ${error?.message}`);
+		assert.deepEqual(provider.getModels(), [], "a rejected list publishes nothing");
+	});
+
+	it("a bare-array body (no data wrapper) is accepted", async () => {
+		const provider = createNineRouterProvider(
+			async () => new Response(JSON.stringify([CAPABLE_ROW]), { status: 200 }),
+		);
+		const models = createModels();
+		models.setProvider(provider);
+
+		const result = await models.refresh({ providers: [NINE_ROUTER_PROVIDER_ID], force: true });
+		assert.equal(result.errors.size, 0, JSON.stringify([...result.errors]));
+		const list = provider.getModels();
+		assert.equal(list.length, 1, "the whole body is the row list");
+		assert.equal(list[0]!.id, "cc/claude-opus-4-6");
+	});
+
+	it("no key in the env → the provider is skipped, no request at all", async () => {
+		delete process.env[NINE_ROUTER_API_KEY_ENV];
+		let calls = 0;
+		const provider = createNineRouterProvider(async () => {
+			calls++;
+			return new Response(JSON.stringify({ data: [CAPABLE_ROW] }), { status: 200 });
+		});
+		const models = createModels();
+		models.setProvider(provider);
+
+		const result = await models.refresh({ providers: [NINE_ROUTER_PROVIDER_ID], force: true });
+		assert.equal(calls, 0, "unconfigured providers are skipped before fetchModels");
+		assert.equal(result.errors.size, 0, JSON.stringify([...result.errors]));
+		assert.deepEqual(provider.getModels(), []);
+		// Restore the file-level before() value for the later cases in this file.
+		process.env[NINE_ROUTER_API_KEY_ENV] = TEST_KEY;
+	});
+
+	it("a JSON null body → empty list, reported error-free, no throw", async () => {
+		const provider = createNineRouterProvider(
+			async () => new Response(JSON.stringify(null), { status: 200 }),
+		);
+		const models = createModels();
+		models.setProvider(provider);
+
+		const result = await models.refresh({ providers: [NINE_ROUTER_PROVIDER_ID], force: true });
+		assert.equal(
+			result.errors.size,
+			0,
+			`null is valid JSON, not a failure: ${JSON.stringify([...result.errors])}`,
+		);
+		assert.deepEqual(provider.getModels(), []);
+	});
+
+	it("discovery carries an abort signal bound to the 5 s budget", async () => {
+		const signals: Array<AbortSignal | null | undefined> = [];
+		// Capture the deadline honestly: the composed signal exposes no
+		// readable timeout, but AbortSignal.timeout is called at fetch time,
+		// so record its argument (delegating to the real one) and restore.
+		const realTimeout = AbortSignal.timeout;
+		const timeoutBounds: number[] = [];
+		AbortSignal.timeout = ((ms: number) => {
+			timeoutBounds.push(ms);
+			return realTimeout.call(AbortSignal, ms);
+		}) as typeof AbortSignal.timeout;
+		try {
+			const provider = createNineRouterProvider(async (_input, init) => {
+				signals.push(init?.signal);
+				return new Response(JSON.stringify({ data: [CAPABLE_ROW] }), { status: 200 });
+			});
+			const models = createModels();
+			models.setProvider(provider);
+
+			const result = await models.refresh({ providers: [NINE_ROUTER_PROVIDER_ID], force: true });
+			assert.equal(result.errors.size, 0, JSON.stringify([...result.errors]));
+		} finally {
+			AbortSignal.timeout = realTimeout;
+		}
+		const signal = signals[0];
+		assert.ok(signal instanceof AbortSignal, "fetchModels composes an AbortSignal into init.signal");
+		assert.equal(signal.aborted, false, "fresh list call, nothing pre-aborted");
+		assert.deepEqual(timeoutBounds, [5000], "spec: one model-list call gets 5000 ms");
+	});
 });
 
 describe("registration", () => {
