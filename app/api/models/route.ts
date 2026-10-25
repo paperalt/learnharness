@@ -1,4 +1,4 @@
-import { ensureNineRouterCatalog, modelCatalog } from "@/src/server";
+import { ensureNineRouterCatalog, modelCatalog, refreshConnectionCatalog } from "@/src/server";
 
 /**
  * The model picker's data (model-control wave): pi-ai's configured-provider
@@ -9,6 +9,7 @@ import { ensureNineRouterCatalog, modelCatalog } from "@/src/server";
  * refresh timeout), a warm one is revalidated in the background.
  */
 export async function GET() {
+	await refreshConnectionCatalog();
 	await ensureNineRouterCatalog();
-	return Response.json(modelCatalog());
+	return Response.json(modelCatalog(), { headers: { "Cache-Control": "no-store" } });
 }
